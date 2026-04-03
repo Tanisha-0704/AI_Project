@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Route Navigator</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050a14;
+    --panel: #0a1628;
+    --panel2: #0d1e35;
+    --border: #1a3a5c;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --accent3: #7fff6b;
+    --text: #c8dff0;
+    --text-dim: #4a7a9b;
+    --node-default: #1a3a5c;
+    --node-hover: #00d4ff;
+    --path-color: #ff6b35;
+    --glow: 0 0 20px rgba(0,212,255,0.4);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridMove 20s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes gridMove {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 40px; }
+  }
+
+  .container {
+    position: relative; z-index: 1;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  /* Header */
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .logo {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, var(--accent), #0066ff);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    box-shadow: var(--glow);
+  }
+  h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.6rem;
+    font-weight: 900;
+    letter-spacing: 3px;
+    background: linear-gradient(135deg, var(--accent), #fff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .status-dot {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.8rem; color: var(--accent3);
+    letter-spacing: 1px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent3);
+    animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.3)} }
+
+  /* Layout */
+  .main-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 900px) {
+    .main-layout { grid-template-columns: 1fr; }
+  }
+
+  /* Panel */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .panel::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+  .panel-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title::before {
+    content: '';
+    width: 3px; height: 14px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* Select / Controls */
+  label {
+    display: block;
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  select, .custom-select {
+    width: 100%;
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.95rem;
+    outline: none;
+    margin-bottom: 16px;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  select:focus, select:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(0,212,255,0.15);
+  }
+  select option { background: #0a1628; }
+
+  /* Destination chips */
+  .dest-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .dest-chip {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    user-select: none;
+    color: var(--text-dim);
+  }
+  .dest-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .dest-chip.selected {
+    background: rgba(0,212,255,0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 8px rgba(0,212,255,0.2);
+  }
+
+  /* Algorithm selector */
+  .algo-row {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  .algo-btn {
+    flex: 1;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  .algo-btn.active {
+    background: rgba(0,212,255,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .algo-btn:hover { border-color: var(--accent); }
+
+  /* Find button */
+  .find-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #00aacc, #0066ff);
+    border: none;
+    border-radius: 10px;
+    padding: 14px;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 3px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+  }
+  .find-btn::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent, rgba(255,255,255,0.1), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.4s;
+  }
+  .find-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,150,255,0.4); }
+  .find-btn:hover::after { transform: translateX(100%); }
+  .find-btn:active { transform: translateY(0); }
+
+  /* Stats panel */
+  .stats-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-top: 16px;
+  }
+  .stat-card {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+  }
+  .stat-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .stat-label {
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  /* Path display */
+  .path-display {
+    margin-top: 16px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 60px;
+  }
+  .path-nodes {
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  }
+  .path-node {
+    background: rgba(0,212,255,0.1);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    color: var(--accent);
+    animation: fadeIn 0.3s ease;
+  }
+  .path-arrow {
+    color: var(--accent2);
+    font-size: 0.9rem;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+
+  /* Canvas area */
+  .map-panel {
+    position: relative;
+  }
+  #mapCanvas {
+    width: 100%;
+    border-radius: 12px;
+    display: block;
+  }
+  .map-overlay {
+    position: absolute; top: 16px; right: 16px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .map-btn {
+    width: 36px; height: 36px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+  }
+  .map-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Legend */
+  .legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin-top: 12px;
+    padding: 10px 16px;
+    background: var(--panel2);
+    border-radius: 8px;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* Progress bar */
+  .algo-progress {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 12px 0;
+    overflow: hidden;
+    display: none;
+  }
+  .algo-progress.active { display: block; }
+  .algo-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    width: 0%;
+    animation: progressAnim 0.8s ease forwards;
+  }
+  @keyframes progressAnim { to { width: 100%; } }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px);
+    background: #1a2a3a;
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 0.9rem;
+    color: var(--text);
+    transition: transform 0.3s;
+    z-index: 100;
+    box-shadow: var(--glow);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Tooltip */
+  .tooltip {
+    position: absolute;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.78rem;
+    pointer-events: none;
+    z-index: 50;
+    display: none;
+    box-shadow: var(--glow);
+  }
+  .tooltip.visible { display: block; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">🗺</div>
+    <div>
+      <h1>PATHFINDER AI</h1>
+      <div class="subtitle">Intelligent Route Navigation System</div>
+    </div>
+    <div class="status-dot"><div class="dot"></div> SYSTEM ONLINE</div>
+  </header>
+
+  <div class="main-layout">
+    <!-- Left Panel -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div class="panel">
+        <div class="panel-title">Origin Point</div>
+        <label>Select Start Location</label>
+        <select id="startSelect">
+          <option>Warehouse</option><option>Hospital</option><option>Market</option>
+          <option>School</option><option>Mall</option><option>Office</option>
+          <option>Park</option><option>Station</option><option>College</option>
+          <option>Library</option><option>Bank</option><option>Temple</option>
+          <option>Cinema</option><option>Airport</option>
+        </select>
+
+        <div class="panel-title" style="margin-top:8px;">Destinations</div>
+        <label>Select one or more stops</label>
+        <div class="dest-grid" id="destGrid"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Algorithm</div>
+        <div class="algo-row">
+          <button class="algo-btn active" onclick="setAlgo('astar',this)">A*</button>
+          <button class="algo-btn" onclick="setAlgo('dijkstra',this)">Dijkstra</button>
+          <button class="algo-btn" onclick="setAlgo('greedy',this)">Greedy</button>
+        </div>
+        <button class="find-btn" onclick="findRoute()">⚡ COMPUTE ROUTE</button>
+
+        <div class="algo-progress" id="progressBar">
+          <div class="algo-progress-bar"></div>
+        </div>
+
+        <div class="stats-row" id="statsRow">
+          <div class="stat-card">
+            <div class="stat-val" id="statDist">—</div>
+            <div class="stat-label">Total Distance</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="statHops">—</div>
+            <div class="stat-label">Nodes Visited</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div class="panel-title">Route Path</div>
+          <div class="path-display" id="pathDisplay">
+            <span style="color:var(--text-dim);font-size:0.8rem;">Run algorithm to see path...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Map -->
+    <div class="panel map-panel">
+      <div class="panel-title">Network Map</div>
+      <canvas id="mapCanvas" width="800" height="520"></canvas>
+      <div class="map-overlay">
+        <button class="map-btn" onclick="zoomIn()" title="Zoom In">+</button>
+        <button class="map-btn" onclick="zoomOut()" title="Zoom Out">−</button>
+        <button class="map-btn" onclick="resetView()" title="Reset">↺</button>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#1a5a8c;border:1px solid #00d4ff"></div>Location Node</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#00d4ff"></div>Start</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff6b35"></div>Destination</div>
+        <div class="legend-item" style="gap:6px"><div style="width:20px;height:2px;background:#00d4ff;opacity:0.3;margin-top:1px"></div>Edge</div>
+        <div class="legend-item" style="gap:6px"><div style="width:20px;height:3px;background:#ff6b35"></div>Path</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const graph = {
+  'Warehouse': {'Hospital':2,'Market':5,'School':7},
+  'Hospital':  {'Warehouse':2,'Market':3,'Mall':4,'College':6},
+  'Market':    {'Warehouse':5,'Hospital':3,'School':2,'Office':6,'Bank':4},
+  'School':    {'Warehouse':7,'Market':2,'Park':3,'Library':4},
+  'Mall':      {'Hospital':4,'Office':2,'Cinema':3},
+  'Office':    {'Market':6,'Mall':2,'Station':4,'Airport':7},
+  'Park':      {'School':3,'Station':5,'Temple':4},
+  'Station':   {'Office':4,'Park':5,'Airport':3},
+  'College':   {'Hospital':6,'Library':2},
+  'Library':   {'School':4,'College':2,'Bank':3},
+  'Bank':      {'Market':4,'Library':3,'Temple':5},
+  'Temple':    {'Park':4,'Bank':5,'Cinema':6},
+  'Cinema':    {'Mall':3,'Temple':6},
+  'Airport':   {'Office':7,'Station':3}
+};
+
+const heuristic = {
+  'Warehouse':12,'Hospital':10,'Market':9,'School':8,'Mall':7,'Office':6,
+  'Park':5,'Station':4,'College':7,'Library':6,'Bank':5,'Temple':3,'Cinema':2,'Airport':0
+};
+
+const positions = {
+  'Warehouse':[70,260],'Hospital':[200,130],'Market':[200,310],
+  'School':[200,430],'Mall':[370,130],'Office':[370,310],
+  'Park':[370,430],'Station':[530,310],'College':[310,60],
+  'Library':[310,430],'Bank':[440,430],'Temple':[530,430],
+  'Cinema':[480,130],'Airport':[640,310]
+};
+
+const nodeCategories = {
+  'Warehouse':'industrial','Hospital':'medical','Market':'commercial',
+  'School':'education','Mall':'commercial','Office':'business',
+  'Park':'nature','Station':'transit','College':'education',
+  'Library':'education','Bank':'finance','Temple':'religious',
+  'Cinema':'entertainment','Airport':'transit'
+};
+
+const icons = {
+  'Warehouse':'🏭','Hospital':'🏥','Market':'🛒','School':'🏫',
+  'Mall':'🏬','Office':'🏢','Park':'🌳','Station':'🚉',
+  'College':'🎓','Library':'📚','Bank':'🏦','Temple':'⛩️',
+  'Cinema':'🎬','Airport':'✈️'
+};
+
+let currentAlgo = 'astar';
+let selectedDests = new Set();
+let currentPath = [];
+let zoom = 1.0;
+let offsetX = 0, offsetY = 0;
+let animFrame = 0;
+let animPath = [];
+let animProgress = 0;
+
+// Build dest grid
+const destGrid = document.getElementById('destGrid');
+Object.keys(graph).forEach(node => {
+  const chip = document.createElement('div');
+  chip.className = 'dest-chip';
+  chip.innerHTML = `${icons[node]} ${node}`;
+  chip.dataset.node = node;
+  chip.onclick = () => toggleDest(node, chip);
+  destGrid.appendChild(chip);
+});
+
+function toggleDest(node, chip) {
+  if (selectedDests.has(node)) {
+    selectedDests.delete(node);
+    chip.classList.remove('selected');
+  } else {
+    selectedDests.add(node);
+    chip.classList.add('selected');
+  }
+}
+
+function setAlgo(algo, btn) {
+  currentAlgo = algo;
+  document.querySelectorAll('.algo-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ---- Algorithms ----
+function astar(start, goal) {
+  const open = [[0, start]];
+  const g = {}; Object.keys(graph).forEach(n => g[n] = Infinity);
+  g[start] = 0;
+  const parent = {};
+  while (open.length) {
+    open.sort((a,b)=>a[0]-b[0]);
+    const [, cur] = open.shift();
+    if (cur === goal) return buildPath(parent, start, goal);
+    for (const [nb, cost] of Object.entries(graph[cur])) {
+      const ng = g[cur] + cost;
+      if (ng < g[nb]) {
+        g[nb] = ng; parent[nb] = cur;
+        open.push([ng + (heuristic[nb]||0), nb]);
+      }
+    }
+  }
+  return null;
+}
+
+function dijkstra(start, goal) {
+  const open = [[0, start]];
+  const g = {}; Object.keys(graph).forEach(n => g[n] = Infinity);
+  g[start] = 0;
+  const parent = {};
+  while (open.length) {
+    open.sort((a,b)=>a[0]-b[0]);
+    const [, cur] = open.shift();
+    if (cur === goal) return buildPath(parent, start, goal);
+    for (const [nb, cost] of Object.entries(graph[cur])) {
+      const ng = g[cur] + cost;
+      if (ng < g[nb]) { g[nb] = ng; parent[nb] = cur; open.push([ng, nb]); }
+    }
+  }
+  return null;
+}
+
+function greedy(start, goal) {
+  const open = [[heuristic[start]||0, start]];
+  const visited = new Set();
+  const parent = {};
+  while (open.length) {
+    open.sort((a,b)=>a[0]-b[0]);
+    const [, cur] = open.shift();
+    if (cur === goal) return buildPath(parent, start, goal);
+    if (visited.has(cur)) continue;
+    visited.add(cur);
+    for (const [nb] of Object.entries(graph[cur])) {
+      if (!visited.has(nb)) { parent[nb] = cur; open.push([heuristic[nb]||0, nb]); }
+    }
+  }
+  return null;
+}
+
+function buildPath(parent, start, goal) {
+  const path = []; let cur = goal;
+  while (cur !== start) { path.push(cur); cur = parent[cur]; if (!cur) return null; }
+  path.push(start); return path.reverse();
+}
+
+function pathCost(path) {
+  let c = 0;
+  for (let i = 0; i < path.length-1; i++) c += graph[path[i]][path[i+1]] || 0;
+  return c;
+}
+
+function findRoute() {
+  const start = document.getElementById('startSelect').value;
+  const dests = [...selectedDests];
+  if (!dests.length) { showToast('⚠ Select at least one destination'); return; }
+
+  const prog = document.getElementById('progressBar');
+  prog.classList.add('active');
+  prog.innerHTML = '<div class="algo-progress-bar"></div>';
+
+  setTimeout(() => {
+    const algFn = currentAlgo === 'astar' ? astar : currentAlgo === 'dijkstra' ? dijkstra : greedy;
+    let full = [], cur = start;
+    for (const dest of dests) {
+      const seg = algFn(cur, dest);
+      if (!seg) { showToast(`✗ No path to ${dest}`); return; }
+      full = full.length ? [...full, ...seg.slice(1)] : seg;
+      cur = dest;
+    }
+    currentPath = full;
+    animPath = full;
+    animProgress = 0;
+    renderPath(full);
+    prog.classList.remove('active');
+  }, 600);
+}
+
+function renderPath(path) {
+  document.getElementById('statDist').textContent = pathCost(path);
+  document.getElementById('statHops').textContent = path.length;
+
+  const pd = document.getElementById('pathDisplay');
+  pd.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'path-nodes';
+  path.forEach((node, i) => {
+    const span = document.createElement('span');
+    span.className = 'path-node';
+    span.style.animationDelay = `${i * 0.05}s`;
+    span.textContent = `${icons[node]} ${node}`;
+    wrap.appendChild(span);
+    if (i < path.length - 1) {
+      const arr = document.createElement('span');
+      arr.className = 'path-arrow'; arr.textContent = '→';
+      wrap.appendChild(arr);
+    }
+  });
+  pd.appendChild(wrap);
+
+  // Animate
+  animProgress = 0;
+  cancelAnimationFrame(animFrame);
+  animateRoute();
+}
+
+function animateRoute() {
+  animProgress = Math.min(animProgress + 0.025, 1);
+  drawMap();
+  if (animProgress < 1) animFrame = requestAnimationFrame(animateRoute);
+}
+
+// ---- Canvas Drawing ----
+const canvas = document.getElementById('mapCanvas');
+const ctx = canvas.getContext('2d');
+
+function worldToCanvas(x, y) {
+  return [(x + offsetX) * zoom, (y + offsetY) * zoom];
+}
+
+function drawMap() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#050a14';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0,212,255,0.05)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  const start = document.getElementById('startSelect').value;
+  const pathSet = new Set(currentPath);
+  const pathEdges = new Set();
+  for (let i = 0; i < currentPath.length - 1; i++)
+    pathEdges.add(`${currentPath[i]}-${currentPath[i+1]}`);
+
+  // Draw edges
+  for (const node of Object.keys(graph)) {
+    for (const nb of Object.keys(graph[node])) {
+      const [x1,y1] = positions[node].map((v,_) => v);
+      const [x2,y2] = positions[nb].map((v,_) => v);
+      const [cx1, cy1] = worldToCanvas(x1, y1);
+      const [cx2, cy2] = worldToCanvas(x2, y2);
+
+      const isPathEdge = pathEdges.has(`${node}-${nb}`) || pathEdges.has(`${nb}-${node}`);
+      if (!isPathEdge) {
+        ctx.beginPath();
+        ctx.moveTo(cx1, cy1); ctx.lineTo(cx2, cy2);
+        ctx.strokeStyle = 'rgba(26,58,92,0.8)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        // Weight label
+        const mx = (cx1+cx2)/2, my = (cy1+cy2)/2;
+        ctx.fillStyle = 'rgba(74,122,155,0.8)';
+        ctx.font = `${10*zoom}px Rajdhani`;
+        ctx.textAlign = 'center';
+        ctx.fillText(graph[node][nb], mx, my);
+      }
+    }
+  }
+
+  // Draw path edges animated
+  if (currentPath.length > 1) {
+    const totalSegs = currentPath.length - 1;
+    const drawn = animProgress * totalSegs;
+    for (let i = 0; i < totalSegs; i++) {
+      if (i >= drawn) break;
+      const n1 = currentPath[i], n2 = currentPath[i+1];
+      let [x1,y1] = positions[n1], [x2,y2] = positions[n2];
+      let [cx1,cy1] = worldToCanvas(x1,y1), [cx2,cy2] = worldToCanvas(x2,y2);
+      const frac = Math.min(drawn - i, 1);
+      const ex = cx1 + (cx2-cx1)*frac, ey = cy1 + (cy2-cy1)*frac;
+
+      // Glow effect
+      ctx.beginPath(); ctx.moveTo(cx1,cy1); ctx.lineTo(ex,ey);
+      ctx.strokeStyle = 'rgba(255,107,53,0.25)'; ctx.lineWidth = 10*zoom; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx1,cy1); ctx.lineTo(ex,ey);
+      ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 3*zoom; ctx.stroke();
+
+      // Weight label on path
+      const mx = (cx1+cx2)/2, my = (cy1+cy2)/2;
+      ctx.fillStyle = '#ffaa77';
+      ctx.font = `bold ${10*zoom}px Rajdhani`;
+      ctx.textAlign = 'center';
+      ctx.fillText(graph[n1][n2], mx, my);
+    }
+  }
+
+  // Draw nodes
+  for (const [node, [nx,ny]] of Object.entries(positions)) {
+    const [cx,cy] = worldToCanvas(nx, ny);
+    const r = 22 * zoom;
+    const isStart = node === start;
+    const isDest = selectedDests.has(node);
+    const isOnPath = pathSet.has(node);
+
+    // Glow
+    if (isStart || isDest || isOnPath) {
+      const glowColor = isStart ? 'rgba(0,212,255,0.25)' : 'rgba(255,107,53,0.25)';
+      ctx.beginPath(); ctx.arc(cx,cy,r*1.6,0,Math.PI*2);
+      const g = ctx.createRadialGradient(cx,cy,r*0.5,cx,cy,r*1.6);
+      g.addColorStop(0, glowColor); g.addColorStop(1,'transparent');
+      ctx.fillStyle = g; ctx.fill();
+    }
+
+    // Circle
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+    const grad = ctx.createRadialGradient(cx-r*0.3,cy-r*0.3,r*0.1,cx,cy,r);
+    if (isStart) { grad.addColorStop(0,'#00ffff'); grad.addColorStop(1,'#0066cc'); }
+    else if (isDest) { grad.addColorStop(0,'#ffaa77'); grad.addColorStop(1,'#cc4400'); }
+    else if (isOnPath) { grad.addColorStop(0,'#ff8855'); grad.addColorStop(1,'#aa3300'); }
+    else { grad.addColorStop(0,'#1e4a70'); grad.addColorStop(1,'#0a1e30'); }
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = isStart ? '#00d4ff' : isDest ? '#ff6b35' : isOnPath ? '#ff6b35' : '#1a5a8c';
+    ctx.lineWidth = isStart || isDest ? 2.5*zoom : 1.5*zoom;
+    ctx.stroke();
+
+    // Emoji icon
+    ctx.font = `${14*zoom}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(icons[node], cx, cy - 4*zoom);
+
+    // Label
+    ctx.font = `${zoom > 0.9 ? 'bold ' : ''}${10*zoom}px Rajdhani`;
+    ctx.fillStyle = isStart ? '#00d4ff' : isDest ? '#ff8855' : isOnPath ? '#ffaa88' : '#7ab0cc';
+    ctx.fillText(node, cx, cy + r + 10*zoom);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // Moving dot along path
+  if (currentPath.length > 1 && animProgress < 1) {
+    const totalSegs = currentPath.length - 1;
+    const drawn = animProgress * totalSegs;
+    const seg = Math.min(Math.floor(drawn), totalSegs - 1);
+    const frac = drawn - seg;
+    const [x1,y1] = positions[currentPath[seg]];
+    const [x2,y2] = positions[currentPath[seg+1]];
+    const [cx1,cy1] = worldToCanvas(x1,y1), [cx2,cy2] = worldToCanvas(x2,y2);
+    const px = cx1+(cx2-cx1)*frac, py = cy1+(cy2-cy1)*frac;
+    ctx.beginPath(); ctx.arc(px,py,7*zoom,0,Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 2; ctx.stroke();
+  }
+}
+
+// Zoom controls
+function zoomIn() { zoom = Math.min(zoom*1.2, 2.5); drawMap(); }
+function zoomOut() { zoom = Math.max(zoom/1.2, 0.4); drawMap(); }
+function resetView() { zoom = 1; offsetX = 0; offsetY = 0; drawMap(); }
+
+// Drag pan
+let dragging = false, dragStart = [0,0], dragOffset = [0,0];
+canvas.addEventListener('mousedown', e => {
+  dragging = true; dragStart = [e.clientX, e.clientY];
+  dragOffset = [offsetX, offsetY];
+});
+canvas.addEventListener('mousemove', e => {
+  if (dragging) {
+    offsetX = dragOffset[0] + (e.clientX - dragStart[0])/zoom;
+    offsetY = dragOffset[1] + (e.clientY - dragStart[1])/zoom;
+    drawMap();
+  }
+  // Tooltip
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / (rect.width/canvas.width);
+  const my = (e.clientY - rect.top) / (rect.height/canvas.height);
+  let hovered = null;
+  for (const [node,[nx,ny]] of Object.entries(positions)) {
+    const [cx,cy] = worldToCanvas(nx,ny);
+    if (Math.hypot(mx-cx, my-cy) < 22*zoom) { hovered = node; break; }
+  }
+  const tip = document.getElementById('tooltip');
+  if (hovered) {
+    tip.className = 'tooltip visible';
+    tip.style.left = (e.clientX+12)+'px'; tip.style.top = (e.clientY-10)+'px';
+    const nbrs = Object.entries(graph[hovered]).map(([n,c])=>`${icons[n]} ${n} (${c})`).join(', ');
+    tip.innerHTML = `<strong style="color:var(--accent)">${icons[hovered]} ${hovered}</strong><br>
+    <span style="color:var(--text-dim);font-size:0.72rem">H = ${heuristic[hovered]}</span><br>
+    <span style="font-size:0.73rem">${nbrs}</span>`;
+  } else {
+    tip.className = 'tooltip';
+  }
+});
+canvas.addEventListener('mouseup', () => dragging = false);
+canvas.addEventListener('mouseleave', () => { dragging = false; document.getElementById('tooltip').className='tooltip'; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.deltaY < 0) zoomIn(); else zoomOut();
+}, {passive:false});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Initial draw
+drawMap();
+
+// Update map on start change
+document.getElementById('startSelect').addEventListener('change', drawMap);
+</script>
+</body>
+</html>
